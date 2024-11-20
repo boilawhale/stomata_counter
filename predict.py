@@ -1,4 +1,5 @@
 import csv
+
 from scipy import interpolate
 from ultralytics import YOLO
 from PIL import Image
@@ -7,7 +8,13 @@ import os
 import numpy as np
 from copy import deepcopy
 from sklearn.decomposition import PCA
+import matplotlib
 import matplotlib.pyplot as plt
+import seaborn as sns
+
+# 避免中文乱码
+matplotlib.rc("font", family='YouYuan')
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 
 def thresholding(img: np.array):
@@ -33,9 +40,7 @@ class Model:
         self.pic = None
         target_ls = self.model.names.values()  #dict
         if len(target_ls) == 3 and 'cell' in target_ls and 'close' in target_ls and 'open' in target_ls:
-            self.type = 0
-        elif len(target_ls) == 1 and 'cell' in target_ls:
-            self.type = 1
+            self.type = "1"
         else:
             self.type = "unknow"
 
@@ -62,6 +67,9 @@ class Model:
             return ls
         else:
             raise TypeError('错误的路径')
+
+    def train(self, dataset_name='origin', epochs=1000, device=0, batch=32):
+        self.model.train(data='./dataset/{}/data.yaml'.format(dataset_name), epochs=epochs, device=device, batch=batch)
 
     def return_results(self, path='20230627_184242_2.bmp'):
         '''
@@ -123,6 +131,39 @@ class Model:
                 output_path = os.path.join('pic/segment/', filename)
                 cv.imwrite(output_path, segmented_part)
 
+    def show_edges(self, path='dataset/pic/20230627_194422_12_bmp.rf.cf9054da86fc2cbf25f2ada017d8c2ca.jpg'):
+        '''
+        展示边缘检测后的图片
+        :param path:单个文件位置
+        :return: None
+        '''
+        a = self.return_results(path)
+        if a[0] != None:
+            for i in a[0]:
+                s = i.boxes.xyxy
+                s = s.cpu().numpy()
+                pic = i.orig_img
+                for j in s[:]:
+                    j1, j2, j3, j4 = int(j[1]), int(j[3]), int(j[0]), int(j[2])
+                    r = pic[j1:j2, j3:j4]
+                    k = cv.cvtColor(r, cv.COLOR_BGR2GRAY)
+                    edges = cv.Canny(k, 100, 200)
+                    cv.imshow('2', edges)
+                    cv.waitKey(5000)
+                    cv.destroyAllWindows()
+
+    def show_results_windows(self):
+        """
+        以窗口展示结果
+        :return:
+        """
+
+    def save_csv_file(self):
+        """
+        保存csv文件
+        :return:
+        """
+
 
 class Result:
     def __init__(self, results,model):
@@ -132,15 +173,12 @@ class Result:
         """
         self.model = model
         self.names = results.names
-        self.cell_list = [] # 惰性
+        self.cell_list = []
         if len(results) != 0:
-            # self.pic = results[0].orig_img
-            # self.orig_shape = results[0].orig_shape
-            pass
+            self.pic = results[0].orig_img
+            self.orig_shape = results[0].orig_shape
         else:
             pass
-        self.pic = results.orig_img
-        self.orig_shape = results.orig_shape
         self.box = []
         self.masks = []
         for result in results:
@@ -158,10 +196,10 @@ class Result:
                     if self.is_inclusive(box, box2):
                         box_ = self.return_segmented_images(i)
                         box2_ = self.return_segmented_images(j)
-                        op = False
+                        op = 0
                         if box2.cls[0] == 2:
-                            op = True
-                        c = cell(box_, box2_, is_open = op)
+                            op = 1
+                        c = cell(box_, box2_, op)
                         self.cell_list.append(c)
                         break  # 可做个置信度比较
 
@@ -197,36 +235,108 @@ class Result:
             segmented_part = segmented_part.astype(np.uint8)
         return segmented_part
 
+    def cut_cell(self):
+        pass
+
+    def show_result(self):
+        self.connect_masks()
+        img = self.pic
+        c = None
+        clo = None
+        ope = None
+        mean = []
+        t = 1
+        for cell_ in self.cell_list:
+            cell_.analyse()
+            plt.subplot(2, 2, 1)
+            plt.scatter(cell_.cell_PCA.line_x, cell_.cell_PCA.line_y, c="r")
+            if cell_.is_open == 1:
+                plt.scatter(cell_.stomata_PCA.line_x, cell_.stomata_PCA.line_y, c="g")
+            else:
+                plt.scatter(cell_.stomata_PCA.line_x, cell_.stomata_PCA.line_y, c="b")
+
+            if c is None:
+                c = cv.cvtColor(cell_.cell, cv.COLOR_BGR2GRAY)
+            else:
+                c += cv.cvtColor(cell_.cell, cv.COLOR_BGR2GRAY)
+
+            if cell_.is_open == 1:
+                if clo is None:
+                    clo = cv.cvtColor(cell_.stomata, cv.COLOR_BGR2GRAY)
+                else:
+                    clo += cv.cvtColor(cell_.stomata, cv.COLOR_BGR2GRAY)
+
+            else:
+                if ope is None:
+                    ope = cv.cvtColor(cell_.stomata, cv.COLOR_BGR2GRAY)
+                else:
+                    ope += cv.cvtColor(cell_.stomata, cv.COLOR_BGR2GRAY)
+            mean.append(cell_.rate)
+            if t <= 4:
+                plt.subplot(4, 4, 4 * t)
+                sns.kdeplot(cell_.cell_PCA.axis[:, 0], c='r')
+                sns.kdeplot(cell_.stomata_PCA.axis[:, 0], c='g')
+                plt.title(f"气孔平均占比为{cell_.rate}")
+                t += 1
+
+        if len(mean) != 0:
+            mean_rate = sum(mean) / len(mean)
+
+        if img is not None:
+            c = np.where(c > 0, 1, 0)
+            img[c == 1] = [200, 127, 127]
+
+        if clo is not None:
+            clo = np.where(clo > 0, 1, 0)
+            img[clo == 1] = [127, 127, 127]
+        if ope is not None:
+            ope = np.where(ope > 0, 1, 0)
+            img[ope == 1] = [127, 127, 200]
+        # c = c.astype(np.uint8)
+        # s = s.astype(np.uint8)
+        # c = c * 50
+        # s = s * 50
+        #
+        # img[:, :, 0] += c
+        # img[:, :, 1] += s
+
+        # img[:, :, 0][img[:, :, 0] > 250] = 250
+        # img[:, :, 1][img[:, :, 1] > 250] = 1
+        # img[:, :, 2][img[:, :, 2] > 250] = 250
+        plt.suptitle(f"气孔占比为{mean_rate}")
+        plt.imshow(img)
+
+        plt.show()
+
     def return_cell(self):
         """
         返回图像中的细胞对象的列表
         :return: list[object:cell]
         """
         if len(self.cell_list) == 0:
-            if self.model.type == 0:
-                self.connect_masks()
-            elif self.model.type == 1:
-                for i, box in enumerate(self.box):
-                    box_ = self.return_segmented_images(i)
-                    c = cell(box_)
-                    self.cell_list.append(c)
+            # if self.model.names
+            self.connect_masks()
         return self.cell_list
 
 
 class cell:
-    def __init__(self,*seg: np.array, **params):
-        self.input = seg
-        self.params = params
-
+    def __init__(self, seg: np.array, seg2: np.array, is_open):
+        """
+        识别出的一个气孔
+        .rate:面积占比
+        :param seg:保卫细胞分割图（掩膜）
+        :param seg2:气孔分割图（掩膜）
+        :param is_open:
+        """
         self.stomata_PCA = None
         self.cell_PCA = None
         self.rate = None
         self.stomata_area = None
         self.cell_area = None
-        self.is_open = None
-        self.cell = None
-        self.stomata = None
-
+        self.is_open = is_open
+        self.cell = seg
+        self.stomata = seg2
+        self.analyse()
 
     @staticmethod
     def return_PCA_result(k: np.array) -> object:
@@ -246,19 +356,7 @@ class cell:
         line_y = line[:, 0] + mean_Y
         return PCA_result(axis, main, line_x, line_y)
 
-    def analyse_type1(self):
-        """
-        第一种分析方式：
-        识别出的一个气孔
-        type1
-        .rate:面积占比
-        :param seg:保卫细胞分割图（掩膜）
-        :param seg2:气孔分割图（掩膜）
-        :param is_open:
-        """
-        self.is_open = self.params['is_open']
-        self.cell = self.input[0]
-        self.stomata = self.input[1]
+    def analyse(self):
         cell_result = self.return_PCA_result(self.cell)
         stomata_result = self.return_PCA_result(self.stomata)
         cell_area = np.sum(thresholding(self.cell))
@@ -271,15 +369,11 @@ class cell:
         self.stomata_area = stomata_area
 
     def return_bit(self):
-        # 返回二值图
-        g = cv.cvtColor(self.input[0], cv.COLOR_BGR2GRAY)
-        result = np.zeros_like(g)
-        for i in self.input:
-            g = cv.cvtColor(i, cv.COLOR_BGR2GRAY)
-            result += g
-        result1 = np.where(result > 0, 1, 0)
-        return result1
-
+        stomata = cv.cvtColor(self.stomata, cv.COLOR_BGR2GRAY)
+        cell_ = cv.cvtColor(self.cell, cv.COLOR_BGR2GRAY)
+        bit = cell_+stomata
+        result = np.where(bit > 0, 1, 0)
+        return result
 
 
 class PCA_result:
@@ -295,6 +389,7 @@ class PCA_result:
         self.main = main
         self.line_x = line_x
         self.line_y = line_y
+
         self.max_axis_length = max(axis) - min(axis)
         plt.subplot(4, 4, 13)
         nums, p, o = plt.hist(axis)
@@ -327,6 +422,34 @@ class PCA_result:
         :return:float
         """
         return self.max_wide
+
+
+def type1():
+    a = Model(model_path='disuse/segment/train17/weights/best.pt')
+    # 设置保存目录
+    output_directory = 'pic/segment/'
+
+    # 调用函数保存分割图像
+    a.save_segmented_images(output_dir=output_directory)
+
+
+# 展示一个图片
+def type2():
+    a = Model(model_path='disuse/segment/train17/weights/best.pt')
+    c = a.return_results(path='20230627_201522_29_bmp_jpg.rf.1b8c85f064148ffe5e9147bbe0cdc494.jpg')
+    i = c[0]
+    i = i.cpu()
+    i = i.numpy()
+    a = Result(i)
+    a.show_result()
+
+
+# 展示许多图片
+def type3():
+    mod = Model(model_path='runs/segment/train10 extend/weights/best.pt')
+    c = mod.return_results(path='20230627_201522_29_bmp_jpg.rf.1b8c85f064148ffe5e9147bbe0cdc494.jpg')
+    for i in c:
+        i.show_result()
 
 
 def predict_as_csv(dir_path):
@@ -384,3 +507,9 @@ def return_PCA_result_list(dir_path, filename, mod):
         ls.append(data_set)
     return ls
 
+
+if __name__ == '__main__':
+    # a = Model(model_path='disuse/segment/train17/weights/best.pt')
+    # a.model.val()
+    # type3()
+    type3()

@@ -7,15 +7,39 @@ import core
 from PIL import Image, ImageTk
 import os
 
+import matplotlib
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# 避免中文乱码
+matplotlib.rc("font", family='YouYuan')
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+
 model_path = 'runs/segment/train10 extend/weights/best.pt'
+model_path2 = 'runs/segment/train16/weights/best.pt'
+
+
 ls_of_photo = []
 ls_of_time = []
 dir_of_result = dict()
+dir_of_pic_cache = dict()
 index = 0
+default_picdir = r'C:\Users\Mr zhang\Desktop\张霄\2023.0817\10X反'
 
-Model = core.Model(model_path=model_path, root_path='./')
+first_open = True
+Model = core.Model(model_path=model_path2, root_path='./')
 
+class pic_cache():
+    def __init__(self, path):
+        self.path = path
+        self.orig = None
+        self.masked = None
+        self.result = None
+    def set_orig(self,orig):
+        self.orig = orig
 
+    def set_mask(self,masked):
+        self.masked = masked
 def show(path):
     if is_mask == 0:
         img = img_deal(path)
@@ -97,12 +121,14 @@ def mask():
         show(ls_of_photo[index])
 
 
-def open_dir(origin=r'H:\西瓜叶片-背面\1-1'):
+def open_dir(origin=default_picdir):
     global ls_of_photo
     global index
+    global first_open
     # 选择文件夹
-    if __name__ == '__main__':
+    if first_open:
         folder_path = origin
+        first_open = False
     else:
         folder_path = tk.filedialog.askdirectory()
     if folder_path:
@@ -153,7 +179,7 @@ root.geometry(str(width) + "x" + str(height) + "+0+0")
 root.title("111")
 main_img = tk.Label(root,
                     bg='black',
-                    height=768, width=680,
+                    height=768, width=1024,
                     padx=0, pady=0
                     )
 f1 = tk.Frame(root,
