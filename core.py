@@ -34,10 +34,11 @@ class Model:
         target_ls = self.model.names.values()  #dict
         if len(target_ls) == 3 and 'cell' in target_ls and 'close' in target_ls and 'open' in target_ls:
             self.type = 0
-        elif len(target_ls) == 1 and 'cell' in target_ls:
+        elif len(target_ls) == 1 and '0' in target_ls:
             self.type = 1
         else:
-            self.type = "unknow"
+            self.type = "unknowing"
+            print('unknowing type ')
 
     def _get_data(self, path):
         """
@@ -80,48 +81,6 @@ class Model:
                 l2.append(r)
         return l2
 
-    @staticmethod
-    def resize_image(image, new_shape):
-        x, y = np.arange(image.shape[1]), np.arange(image.shape[0])
-        f = interpolate.interp2d(x, y, image, kind='linear')
-        new_x, new_y = np.linspace(0, image.shape[1], new_shape[1]), \
-            np.linspace(0, image.shape[0], new_shape[0])
-        resized_image = f(new_x, new_y)
-        return resized_image
-
-    def save_segmented_images(self, output_dir: str, save_path='pic/stomata/'):
-        """
-        保存分割出的图像为彩色图。
-
-        Args:
-            results (Results): YOLOv8 分割模型生成的 results 类。
-            orig_image (np.ndarray): 原始彩色图像。
-            output_dir (str): 保存图像的目标文件夹路径。
-            :param output_dir:
-            :param save_path:
-        """
-        pat = self.return_results('dataset/pic/20230627_194422_12_bmp.rf.cf9054da86fc2cbf25f2ada017d8c2ca.jpg')
-        save_path = self.root_path + save_path
-
-        for results in pat:
-            pic_name = results.path
-            pic_name = os.path.splitext(pic_name)[1]
-            orig_image = deepcopy(results.orig_img)
-            masks1 = results.masks
-            masks2 = masks1.cpu()
-            masks3 = masks2.data
-            masks4 = masks3.numpy()
-            for i, mask in enumerate(masks4):
-                mask = self.resize_image(mask, (768, 1024))
-                # 提取掩码对应的部分
-                o = np.expand_dims(mask, axis=-1)
-                segmented_part = orig_image * o
-                segmented_part = segmented_part.astype(np.uint8)
-
-                # 保存为新的图像文件
-                filename = f"segmented_{i}.png"
-                output_path = os.path.join('pic/segment/', filename)
-                cv.imwrite(output_path, segmented_part)
 
 
 class Result:

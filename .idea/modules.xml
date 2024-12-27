@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/sc-master.iml" filepath="$PROJECT_DIR$/.idea/sc-master.iml" />
+      <module fileurl="file://D:/anaconda3/envs/yolo8_2/Lib/site-packages/ultralytics/.idea/ultralytics.iml" filepath="D:/anaconda3/envs/yolo8_2/Lib/site-packages/ultralytics/.idea/ultralytics.iml" />
     </modules>
   </component>
 </project>

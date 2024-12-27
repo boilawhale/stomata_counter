@@ -15,8 +15,8 @@ import seaborn as sns
 matplotlib.rc("font", family='YouYuan')
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
-model_path = 'runs/segment/train10 extend/weights/best.pt'
-model_path2 = 'runs/segment/train16/weights/best.pt'
+# model_path = 'runs/segment/train10 extend/weights/best.pt'
+model_path = 'runs/segment/train34/weights/best.pt'
 
 
 ls_of_photo = []
@@ -27,19 +27,115 @@ index = 0
 default_picdir = r'C:\Users\Mr zhang\Desktop\张霄\2023.0817\10X反'
 
 first_open = True
-Model = core.Model(model_path=model_path2, root_path='./')
+Model = core.Model(model_path=model_path, root_path='./')
 
-class pic_cache():
-    def __init__(self, path):
-        self.path = path
-        self.orig = None
-        self.masked = None
-        self.result = None
-    def set_orig(self,orig):
-        self.orig = orig
+class control_ls():
+    def __init__(self,path):
+        self.dir_path = path
+        self.ls_of_time = []
+        self.deal_pics_cache = dict()
 
-    def set_mask(self,masked):
-        self.masked = masked
+    def add_new_pic(self,path):
+        results = Model.return_results(path)
+        result = results[0]
+        new_pic = dealt_pic_cache(result)
+        self.ls_of_time.append(path)
+        self.deal_pics_cache[path] = new_pic
+
+    def remove_pic(self):
+        pass
+
+    def garbage_collection(self):
+        pass
+
+    def save_all_data_as_csv(self):
+        pass
+
+
+
+class dealt_pic_cache():
+    '''
+    处理过的类
+    '''
+    def __init__(self,orig:core.Result):
+        self.source = orig
+        self.mask_ls = list()
+        orig_pic = orig.pic
+        cell_list = orig.return_cell()
+        mask_layer = np.zeros(orig.orig_shape)
+        a = 0.5  # 透明度
+        color_mask = np.zeros([orig.orig_shape[0],
+                               orig.orig_shape[1],
+                               3
+                               ],
+                              dtype=float
+                              )
+        # mask的颜色
+        color_mask[:, :, 0] = 240
+        color_mask[:, :, 1] = 140
+        color_mask[:, :, 2] = 50
+
+        for i in cell_list:
+            mask_layer += i.return_bit()
+            self.mask_ls.append(mask_layer)
+        mask_layer[mask_layer > 1] = 1
+        mask_layer = np.expand_dims(mask_layer, axis=2)
+        mask_layer = np.repeat(mask_layer, 3, axis=2)
+        color_mask = color_mask * mask_layer
+        mask_layer[mask_layer == 1] = a
+        mask_layer[mask_layer == 0] = 1
+
+        res = mask_layer * orig_pic + color_mask * (1 - a)
+        res = res.astype('uint8')
+        self.orig_pic = orig_pic
+        self.masked_pic = res
+
+    def update_result(self,orig):
+        mask_layer = np.zeros(orig.orig_shape)
+        for i in self.mask_ls:
+            mask_layer += i
+        self.masked_pic = mask_layer
+
+    def add_mask(self,mask:np.array):
+        pass
+    def remove_mask(self,id):
+        pass
+class Mask():
+    pass
+
+
+class showing_pic():
+    def __init__(self,dealt_pic:dealt_pic_cache):
+        self.showing_img = dealt_pic
+        self.show_mask = list()
+        self.dealt_pic = dealt_pic
+        self.width = 0
+        self.height = 0
+
+    def change_to(self,img:np.array,dealt_pic):
+        self.showing_img = img
+        self.dealt_pic = dealt_pic
+        self.show()
+
+    def return_showing_mask_id_by_pos(self,pos:tuple[int]):
+        pass
+
+    def change_remove_one_result_by_id(self,i):
+        self.show_mask.remove(i)
+        self.show()
+
+    def add_poly(selfself):
+        pass
+
+    def show(self):
+        pass
+
+
+
+class data_analysis():
+    pass
+
+
 def show(path):
     if is_mask == 0:
         img = img_deal(path)
@@ -169,13 +265,15 @@ def img_deal(input):
     img2_avoid_trash = ImageTk.PhotoImage(img)
     return img2_avoid_trash
 
+def left_chick_of_img(event):
+    pass
 
-path = r'G:\sc\sc-master\20230627_184242_2.bmp'
-width = 1350
-height = 768
+
+windows_width = 1350
+windows_height = 768
 
 root = tk.Tk()
-root.geometry(str(width) + "x" + str(height) + "+0+0")
+root.geometry(str(windows_width) + "x" + str(windows_height) + "+0+0")
 root.title("111")
 main_img = tk.Label(root,
                     bg='black',
@@ -221,5 +319,11 @@ label_of_index = tk.Label(f1,
                           text='')
 label_of_index.pack()
 
+
+def update_text():
+    # 更新文本内容
+    # 每1000毫秒（1秒）调用一次update_text函数
+    root.after(1000, update_text)
 open_dir()
 root.mainloop()
+
