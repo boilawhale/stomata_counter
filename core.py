@@ -177,6 +177,7 @@ class cell:
         self.input = seg
         self.params = params
 
+        self.contour = None
         self.stomata_PCA = None
         self.cell_PCA = None
         self.rate = None
@@ -229,6 +230,29 @@ class cell:
         self.cell_area = cell_area
         self.stomata_area = stomata_area
 
+    def analyse_type2(self):
+        """
+        第二种分析方式：
+        识别出的一个气孔
+        type1
+        .rate:面积占比
+        :param seg:保卫细胞分割图（掩膜）
+        :param seg2:气孔分割图（掩膜）
+        :param is_open:
+        """
+        self.cell = self.input[0]
+        cell_result = self.return_PCA_result(self.cell)
+        self.cell_PCA = cell_result
+        cell_area = np.sum(thresholding(self.cell))
+        self.cell_area = cell_area
+        img = cv.cvtColor(self.cell, cv.COLOR_BGR2GRAY)
+        r,temp_255 = cv.threshold(img,1,255,cv.THRESH_BINARY)
+        contours, hierarchy = cv.findContours(temp_255, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            perimeter = cv.arcLength(contour, True)  # 计算轮廓的周长
+            break
+        self.contour = perimeter
+
     def return_bit(self):
         # 返回二值图
         g = cv.cvtColor(self.input[0], cv.COLOR_BGR2GRAY)
@@ -238,6 +262,7 @@ class cell:
             result += g
         result1 = np.where(result > 0, 1, 0)
         return result1
+
 
 
 
