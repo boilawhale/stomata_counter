@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 
 def thresholding(img: np.array):
+    # 返回大于某个值的坐标
     img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     X = np.array(np.where(img > 0.2))
     X = np.transpose(X)
@@ -102,10 +103,11 @@ class Result:
         self.orig_shape = results.orig_shape
         self.box = []
         self.masks = []
+        self.confident = []
         for result in results:
             self.box.append(result.boxes)
             self.masks.append(result.masks)
-
+            self.confident.append(result.boxes.conf)
     def connect_masks(self):
         '''
         根据相关关系判断是否采用气孔识别的结果
@@ -146,14 +148,20 @@ class Result:
         resized_image = f(new_x, new_y)
         return resized_image
 
+
     def return_segmented_images(self, index):
-        for i, mask in enumerate(self.masks[index]):
-            mask2 = np.array(mask.data)[0]
-            mask3 = self.resize_image(mask2, self.orig_shape)
-            # 提取掩码对应的部分
+        # 假设 self.masks[index] 的长度不大，可以提前获取一次
+        masks_data = [np.array(mask.data)[0] for mask in self.masks[index]]
+        # 将所有 mask 先进行 resize，减少重复计算
+        resized_masks = [self.resize_image(mask, self.orig_shape) for mask in masks_data]
+        # 初始化 segmented_part 为零，这样可以减少内存分配
+        segmented_part = np.zeros_like(self.pic, dtype=np.uint8)
+        # 合并所有的掩码
+        for mask3 in resized_masks:
+            # 对每个掩码进行处理，合并到 segmented_part 中
             o = np.expand_dims(mask3, axis=-1)
-            segmented_part = self.pic * o
-            segmented_part = segmented_part.astype(np.uint8)
+            segmented_part += (self.pic * o).astype(np.uint8)
+
         return segmented_part
 
     def return_cell(self):
@@ -167,7 +175,7 @@ class Result:
             elif self.model.type == 1:
                 for i, box in enumerate(self.box):
                     box_ = self.return_segmented_images(i)
-                    c = cell(box_)
+                    c = cell(box_,conf = self.confident[i])
                     self.cell_list.append(c)
         return self.cell_list
 
@@ -221,8 +229,8 @@ class cell:
         self.stomata = self.input[1]
         cell_result = self.return_PCA_result(self.cell)
         stomata_result = self.return_PCA_result(self.stomata)
-        cell_area = np.sum(thresholding(self.cell))
-        stomata_area = np.sum(thresholding(self.stomata))
+        cell_area = np.sum(cv.threshold(self.cell,1,1,cv.IMREAD_GRAYSCALE))
+        stomata_area = np.sum(cv.threshold(self.stomata,1,1,cv.IMREAD_GRAYSCALE))
         rate = stomata_area / (cell_area + stomata_area)
         self.rate = rate
         self.cell_PCA = cell_result
@@ -234,6 +242,7 @@ class cell:
         """
         第二种分析方式：
         识别出的一个气孔
+        如果错误，PCA会为None
         type1
         .rate:面积占比
         :param seg:保卫细胞分割图（掩膜）
@@ -241,13 +250,20 @@ class cell:
         :param is_open:
         """
         self.cell = self.input[0]
-        cell_result = self.return_PCA_result(self.cell)
+        try:
+            # if self.is_open:
+            cell_result = self.return_PCA_result(self.cell)
+        except:
+            cell_result = None
         self.cell_PCA = cell_result
-        cell_area = np.sum(thresholding(self.cell))
+        gray_img = cv.cvtColor(self.cell, cv.COLOR_BGR2GRAY)
+        _, thresh_img = cv.threshold(gray_img, 1, 255, cv.THRESH_BINARY)
+        cell_area = np.sum(thresh_img)  # 求和，计算非零像素点的总数
         self.cell_area = cell_area
         img = cv.cvtColor(self.cell, cv.COLOR_BGR2GRAY)
         r,temp_255 = cv.threshold(img,1,255,cv.THRESH_BINARY)
         contours, hierarchy = cv.findContours(temp_255, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        perimeter = -1
         for contour in contours:
             perimeter = cv.arcLength(contour, True)  # 计算轮廓的周长
             break
@@ -261,6 +277,7 @@ class cell:
             g = cv.cvtColor(i, cv.COLOR_BGR2GRAY)
             result += g
         result1 = np.where(result > 0, 1, 0)
+        result1 =result1.astype(np.uint8)
         return result1
 
 
