@@ -257,7 +257,7 @@ class cell:
             cell_result = None
         self.cell_PCA = cell_result
         gray_img = cv.cvtColor(self.cell, cv.COLOR_BGR2GRAY)
-        _, thresh_img = cv.threshold(gray_img, 1, 255, cv.THRESH_BINARY)
+        _, thresh_img = cv.threshold(gray_img, 1, 1, cv.THRESH_BINARY)
         cell_area = np.sum(thresh_img)  # 求和，计算非零像素点的总数
         self.cell_area = cell_area
         img = cv.cvtColor(self.cell, cv.COLOR_BGR2GRAY)

@@ -1,3 +1,4 @@
+import csv
 import tkinter as tk
 from tkinter import filedialog
 
@@ -79,7 +80,62 @@ class control_ls():
         pass
 
     def save_all_data_as_csv(self):
-        pass
+        print("保存中")
+        def return_PCA_result_list(dir_path, filename, mod):
+            '''
+            单张图片的
+            :param dir_path:file location
+            :param filename:str
+            :param mod: mode
+            :return:list
+            '''
+            try:
+                filepath = os.path.join(dir_path, filename)
+                c = mod.return_results(filepath)
+                i = c[0]
+                ls = []
+                for j in i.return_cell():
+                    j.analyse_type2()
+                    # 气孔面积  保卫细胞面积  是否打开 保卫细胞方向x 保卫细胞方向y    气孔方向x 气孔方向y 面积占比  属于的叶片（文件路径）
+                    data_set = (
+                        j.cell_area,
+                        j.contour,
+                        j.cell_area / j.contour,
+                        j.params['conf'],
+                        j.cell_PCA.main[0, 0],
+                        j.cell_PCA.main[0, 1],
+                        filepath
+                    )
+                    ls.append(data_set)
+            except Exception as e:
+                print(e)
+            return ls
+
+        if self.dir_path is None:
+            folder_path = tk.filedialog.askdirectory()
+        else:
+            folder_path = self.dir_path
+
+        name = os.path.split(folder_path)[1]
+        with open(name + 'result.csv', "w", encoding='utf8', newline='') as f:
+            a = csv.writer(f, )
+            a.writerow(('气孔面积', '气孔周长', '形状指数', '置信度', '气孔方向x', '气孔方向y', '属于的叶片（文件路径）',
+                        '叶子序数', '气孔序数'))
+        n_of_leaf = 0
+        for i in os.listdir(folder_path):
+            if i.endswith(('.bmp', '.jpg', '.jpeg')):
+                ls = return_PCA_result_list(folder_path, i, Model)
+                print(f"保存{i}中,{ls}")
+                with open(name + 'result.csv', "a", encoding='utf8', newline='') as f:
+                    a = csv.writer(f, )
+                    n_of_pic = 0
+                    for r in ls:
+                        r = list(r)
+                        r.append(n_of_leaf)
+                        r.append(n_of_pic)
+                        a.writerow(r)
+                        n_of_pic += 1
+                n_of_leaf += 1
 
     def load_cache_for_index(self):
         """加载当前 index 前后缓存的图片"""
@@ -105,6 +161,8 @@ class control_ls():
             self.load_cache_for_index()  # 每次检查并更新当前索引前后3张图像的缓存
             time.sleep(1)  # 每隔2秒检查一次，可以根据需求调整时间间隔
             print('getting pic')
+content = control_ls()
+
 
 class dealt_pic_cache():
     '''
@@ -477,13 +535,20 @@ label_of_number = tk.Label(f2,
                           text='')
 label_of_number.pack()
 
+open_dir_button.pack()
+show_button = tk.Button(f1,
+                        width=6, height=2,
+                        relief='raise',
+                        command=content.save_all_data_as_csv,
+                        text='保存为csv')
+show_button.pack()
+
 def update_cache():
     # 更新文本内容
     # 每1000毫秒（1秒）调用一次update_text函数
     pass
 
 
-content = control_ls()
 open_dir()
 content.start_cache_thread()
 root.mainloop()
