@@ -1,4 +1,8 @@
 import csv
+import logging
+import time
+
+import torch
 from scipy import interpolate
 from ultralytics import YOLO
 from PIL import Image
@@ -9,6 +13,7 @@ from copy import deepcopy
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
+from logging_file import logger
 
 def thresholding(img: np.array):
     # 返回大于某个值的坐标
@@ -77,7 +82,6 @@ class Model:
             results = self.model.predict(source=f, save=False)
             for result in results:
                 result = result.cpu()
-                result = result.numpy()
                 r = Result(result, self)
                 l2.append(r)
         return l2
@@ -85,26 +89,26 @@ class Model:
 
 
 class Result:
-    def __init__(self, results,model):
+    def __init__(self, result,model):
         """
         一张图片的结果
-        :param results:
+        :param result:
         """
         self.model = model
-        self.names = results.names
+        self.names = result.names
         self.cell_list = [] # 惰性
-        if len(results) != 0:
+        if len(result) != 0:
             # self.pic = results[0].orig_img
             # self.orig_shape = results[0].orig_shape
             pass
         else:
             pass
-        self.pic = results.orig_img
-        self.orig_shape = results.orig_shape
+        self.pic = result.orig_img
+        self.orig_shape = result.orig_shape
         self.box = []
         self.masks = []
         self.confident = []
-        for result in results:
+        for result in result:
             self.box.append(result.boxes)
             self.masks.append(result.masks)
             self.confident.append(result.boxes.conf)
@@ -148,8 +152,51 @@ class Result:
         resized_image = f(new_x, new_y)
         return resized_image
 
-
     def return_segmented_images(self, index):
+        # print("输入参数",index)
+        start_time = time.time()
+        # 假设 self.masks[index] 的长度不大，可以提前获取一次
+        masks_data = [np.array(mask.data)[0] for mask in self.masks[index]]
+        # 将所有 mask 先进行 resize，减少重复计算
+        resized_masks = [self.resize_image(mask, self.orig_shape) for mask in masks_data]
+        resized_masks = [torch.tensor(mask).to(torch.uint8) for mask in resized_masks]
+        # 初始化 segmented_part 为零，这样可以减少内存分配
+        orig = torch.tensor(self.pic)
+        segmented_part = torch.zeros_like(orig, dtype=torch.uint8)
+        # 合并所有的掩码
+        for mask3 in resized_masks:
+            # 对每个掩码进行处理，合并到 segmented_part 中
+            o = mask3.unsqueeze(-1)
+            temp = orig * o
+            segmented_part += temp  # 运算后将结果转换为 uint8 类型
+        segmented_part = segmented_part.cpu().numpy()
+        end_time = time.time()
+        logger.debug("tensor分割出一幅图像的气孔用时为{:.6f}s".format(end_time - start_time))
+        return segmented_part
+
+    def return_segmented_images_tensor_cpu(self, index):
+        start_time = time.time()
+        # 假设 self.masks[index] 的长度不大，可以提前获取一次
+        masks_data = [np.array(mask.data)[0] for mask in self.masks[index]]
+        # 将所有 mask 先进行 resize，减少重复计算
+        resized_masks = [self.resize_image(mask, self.orig_shape) for mask in masks_data]
+        resized_masks = [torch.tensor(mask).to(torch.uint8) for mask in resized_masks]
+        # 初始化 segmented_part 为零，这样可以减少内存分配
+        orig = torch.tensor(self.pic)
+        segmented_part = torch.zeros_like(orig, dtype=torch.uint8)
+        # 合并所有的掩码
+        for mask3 in resized_masks:
+            # 对每个掩码进行处理，合并到 segmented_part 中
+            o = mask3.unsqueeze(-1)
+            temp = orig * o
+            segmented_part += temp  # 运算后将结果转换为 uint8 类型
+        segmented_part = segmented_part.cpu().numpy()
+        end_time = time.time()
+        print("tensor用时为{:.6f}s".format(end_time - start_time))
+        return segmented_part
+
+    def return_segmented_images_np(self, index):
+        start_time = time.time()
         # 假设 self.masks[index] 的长度不大，可以提前获取一次
         masks_data = [np.array(mask.data)[0] for mask in self.masks[index]]
         # 将所有 mask 先进行 resize，减少重复计算
@@ -161,7 +208,8 @@ class Result:
             # 对每个掩码进行处理，合并到 segmented_part 中
             o = np.expand_dims(mask3, axis=-1)
             segmented_part += (self.pic * o).astype(np.uint8)
-
+        end_time = time.time()
+        print("array用时为{:.6f}s".format(end_time - start_time))
         return segmented_part
 
     def return_cell(self):
@@ -174,6 +222,7 @@ class Result:
                 self.connect_masks()
             elif self.model.type == 1:
                 for i, box in enumerate(self.box):
+                    print(len(self.box))
                     box_ = self.return_segmented_images(i)
                     c = cell(box_,conf = self.confident[i])
                     self.cell_list.append(c)

@@ -3,17 +3,14 @@ import tkinter as tk
 from tkinter import filedialog
 
 import numpy as np
-from jinja2.ext import with_
-from numpy.ma.core import is_mask
 
 import core
 from PIL import Image, ImageTk
 import os
 
 import matplotlib
-import matplotlib.pyplot as plt
-import seaborn as sns
 
+from logging_file import logger
 import threading
 import time
 
@@ -141,26 +138,29 @@ class control_ls():
         """加载当前 index 前后缓存的图片"""
         start_index = max(0, self.index - self.cache_window)
         end_index = min(len(self.ls_of_photo), self.index + self.cache_window + 1)
+        print("将加载第{}-{}张图片".format(start_index, end_index))
         for i in range(start_index, end_index):
             path = self.ls_of_photo[i]
             if path not in self.deal_pics_cache:
-                self.add_new_pic(path)  # 加载并缓存图片
+                self.add_new_pic(path)
+                print("加载图片中 {},目前有{}个缓存".format(path,len(self.deal_pics_cache)))# 加载并缓存图片
 
     def start_cache_thread(self):
         """启动后台线程，定时检查并更新缓存"""
         if self.cache_thread is None or not self.cache_thread.is_alive():
+            print('线程启动')
             self.cache_thread = threading.Thread(target=self.cache_updater)
             self.cache_thread.daemon = True
             self.cache_thread.start()
-            print(self.cache_thread)
+            logger.debug(self.cache_thread)
 
     def cache_updater(self):
         """后台线程，每隔一段时间检查并更新缓存"""
         while True:
-            print('trying')
+            print('trying,now have {} caches'.format(len(self.deal_pics_cache)))
             self.load_cache_for_index()  # 每次检查并更新当前索引前后3张图像的缓存
-            time.sleep(1)  # 每隔2秒检查一次，可以根据需求调整时间间隔
-            print('getting pic')
+            time.sleep(2)  # 每隔2秒检查一次，可以根据需求调整时间间隔
+
 content = control_ls()
 
 
@@ -314,18 +314,14 @@ def show(path):
         img = img_deal(path)
         main_img.itemconfig(image_id, image=img)
         print(content.deal_pics_cache[path].pic.shape[1])
-        print("ssss)")
         return
 
     # 检查缓存中是否已有处理过的图像
     if path not in content.deal_pics_cache:
         # 如果缓存中没有，处理该图像并生成一个新的缓存实例
         content.add_new_pic(path)
-        print("没有检测到缓存")
-        print(content.deal_pics_cache)
     else:
         print("检测到缓存")
-        print(content.cache_thread)
 
      # 创建类实例并缓存
 
@@ -387,18 +383,18 @@ def open_dir(origin=default_picdir):
         # 清空列表
         content.clear()
         content.get_name(folder_path)
-
+    print("duandian1")
     if len(content.ls_of_photo) > 0:
         show(content.ls_of_photo[0])
         content.index = 0
         change_show_index()
-        for i in content.ls_of_photo:
-            result = Model.return_results(i)
-            content.ls_of_time.append(i)
-            content.deal_pics_cache[i] = dealt_pic_cache(result[0])
-            break
+        # for i in content.ls_of_photo:
+        #     result = Model.return_results(i)
+        #     content.ls_of_time.append(i)
+        #     content.deal_pics_cache[i] = dealt_pic_cache(result[0])
+        #     break
     else:
-        pass
+        print("没有检测到文件夹中的照片")
 
 def change_show_index():
     total = len(content.ls_of_photo)
@@ -543,12 +539,8 @@ show_button = tk.Button(f1,
                         text='保存为csv')
 show_button.pack()
 
-def update_cache():
-    # 更新文本内容
-    # 每1000毫秒（1秒）调用一次update_text函数
-    pass
-
 
 open_dir()
 content.start_cache_thread()
 root.mainloop()
+
