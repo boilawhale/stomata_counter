@@ -31,7 +31,7 @@ def setup_logging():
 
     # 创建控制台处理器，并设置控制台输出格式
     console_handler = logging.StreamHandler()
-    logger.setLevel(logging.INFO)
+    console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
     # 将处理器添加到日志记录器

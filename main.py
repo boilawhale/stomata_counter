@@ -66,9 +66,12 @@ class control_ls():
     def add_new_pic(self,path):
         results = Model.return_results(path)
         result = results[0]
+        start_time = time.time()
         new_pic = dealt_pic_cache(result)
+        end_time = time.time()
         self.ls_of_time.append(path)
         self.deal_pics_cache[path] = new_pic
+        logger.debug(f"add_new_pic运行时间: {end_time - start_time} 秒")
 
     def remove_pic(self):
         pass
@@ -152,7 +155,6 @@ class control_ls():
             self.cache_thread = threading.Thread(target=self.cache_updater)
             self.cache_thread.daemon = True
             self.cache_thread.start()
-            logger.debug(self.cache_thread)
 
     def cache_updater(self):
         """后台线程，每隔一段时间检查并更新缓存"""
@@ -173,7 +175,6 @@ class dealt_pic_cache():
         # 检查传入参数orig的有效性
         if not isinstance(orig, core.Result):
             raise TypeError("Expected 'core.Result' type for 'orig', got {}".format(type(orig)))
-
         self.source = orig
         self.pic = orig.pic
 
@@ -209,14 +210,21 @@ class dealt_pic_cache():
         # 创建并计算掩码层和轴线层
         mask_layer = np.zeros(self.source.orig_shape,dtype=np.uint8)
         axis_layer = np.zeros_like(self.pic,dtype=np.uint8)
-
+        start_time = time.time()
         for i in cell_list:
             # 累加细胞的掩码
-            mask_layer += i.return_bit()
+            bit = i.return_bit()
+            mask_layer += bit
+
             # 分析细胞，计算面积和周长
-            i.analyse_type2()
+            start_time3 = time.time()
+            i.analyse_type2(bit)
+            end_time4 = time.time()
+            logger.debug(f"分析2的运行时间: {end_time4 - start_time3} 秒")
+
             total_area += i.cell_area
             total_perimeter += i.contour
+            end_time = time.time()
 
             # 更新轴线数据
             if i.cell_PCA is not None:
@@ -224,6 +232,11 @@ class dealt_pic_cache():
                 x = np.clip(i.cell_PCA.line_x.astype(np.int32), 0, self.source.orig_shape[1] - 1)
                 axis_layer[y, x] = axis_color
 
+            end_time3 = time.time()
+            logger.debug(f"处理一张图片细胞的运行时间: {end_time3 - start_time3} 秒")
+
+        end_time2 = time.time()
+        logger.debug(f"deal_pic中PCA运行时间: {end_time2 - start_time} 秒")
         # 确保mask_layer值在[0, 1]之间，防止溢出
         mask_layer = np.clip(mask_layer, 0, 1)
         mask_layer = np.expand_dims(mask_layer, axis=2)  # 增加维度以便与颜色蒙版合并
@@ -244,7 +257,7 @@ class dealt_pic_cache():
         self.mean_axis = avg_perimeter
         self.s_counter = len(cell_list)
         self.c_counter = sum([1 for i in cell_list if i.params["conf"] > 0.5]) #置信度
-
+        logger.debug(f"deal_pic运行时间: {end_time - start_time} 秒")
         del self.source
     def update_result(self,orig):
         # mask_layer = np.zeros(orig.orig_shape)
@@ -309,11 +322,11 @@ class data_analysis():
 
 
 def show(path):
+    start_time = time.time()
     if content.is_show == 0:
         # 如果不需要处理，直接显示图片
         img = img_deal(path)
         main_img.itemconfig(image_id, image=img)
-        print(content.deal_pics_cache[path].pic.shape[1])
         return
 
     # 检查缓存中是否已有处理过的图像
@@ -322,12 +335,11 @@ def show(path):
         content.add_new_pic(path)
     else:
         print("检测到缓存")
+    end_time2 = time.time()
 
      # 创建类实例并缓存
-
     # 获取缓存中的处理结果
     cached_result = content.deal_pics_cache[path]
-
     # 从缓存实例中获取处理后的图像
     res = cached_result.return_pic().astype('uint8')
 
@@ -342,6 +354,9 @@ def show(path):
         平均周长: {cached_result.mean_axis if cached_result.mean_axis is not None else 0:.2f}
     '''
     label_of_number.config(text=show_text)
+    end_time = time.time()
+    logger.debug(f"show运行时间: {end_time - start_time:3f} 秒")
+    logger.debug(f"show中add_new_pic运行时间: {end_time2 - start_time:3f} 秒")
 
 
 def next():
@@ -383,7 +398,7 @@ def open_dir(origin=default_picdir):
         # 清空列表
         content.clear()
         content.get_name(folder_path)
-    print("duandian1")
+    start_time = time.time()
     if len(content.ls_of_photo) > 0:
         show(content.ls_of_photo[0])
         content.index = 0
@@ -395,6 +410,8 @@ def open_dir(origin=default_picdir):
         #     break
     else:
         print("没有检测到文件夹中的照片")
+    end_time = time.time()
+    logger.debug(f"open_dir运行时间: {end_time - start_time} 秒")
 
 def change_show_index():
     total = len(content.ls_of_photo)
@@ -541,6 +558,6 @@ show_button.pack()
 
 
 open_dir()
-content.start_cache_thread()
+# content.start_cache_thread()
 root.mainloop()
 

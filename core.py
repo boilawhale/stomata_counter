@@ -17,7 +17,6 @@ from logging_file import logger
 
 def thresholding(img: np.array):
     # 返回大于某个值的坐标
-    img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     X = np.array(np.where(img > 0.2))
     X = np.transpose(X)
     return X
@@ -93,6 +92,8 @@ class Result:
         """
         一张图片的结果
         :param result:
+        :param model:
+        :return:None
         """
         self.model = model
         self.names = result.names
@@ -105,43 +106,10 @@ class Result:
             pass
         self.pic = result.orig_img
         self.orig_shape = result.orig_shape
-        self.box = []
-        self.masks = []
-        self.confident = []
-        for result in result:
-            self.box.append(result.boxes)
-            self.masks.append(result.masks)
-            self.confident.append(result.boxes.conf)
-    def connect_masks(self):
-        '''
-        根据相关关系判断是否采用气孔识别的结果
-        :return:
-        '''
-        for i, box in enumerate(self.box):
-            if box.cls[0] == 0:
-                for j, box2 in enumerate(self.box):
-                    if self.is_inclusive(box, box2):
-                        box_ = self.return_segmented_images(i)
-                        box2_ = self.return_segmented_images(j)
-                        op = False
-                        if box2.cls[0] == 2:
-                            op = True
-                        c = cell(box_, box2_, is_open = op)
-                        self.cell_list.append(c)
-                        break  # 可做个置信度比较
+        self.boxes = result.boxes
+        self.masks = result.masks
+        self.confident = result.boxes.conf
 
-    @staticmethod
-    def is_inclusive(box1, box2) -> bool:
-        a = 1
-        if box1.xyxy[0, 0] <= box2.xyxy[0, 0]*a and \
-                box1.xyxy[0, 1] <= box2.xyxy[0, 1]*a and \
-                box1.xyxy[0, 2] >= box2.xyxy[0, 2]*a and \
-                box1.xyxy[0, 3] >= box2.xyxy[0, 3]*a and \
-                box1.cls[0] == 0 and \
-                box2.cls[0] != 0:
-            return True
-        else:
-            return False
 
     @staticmethod
     def resize_image(image, new_shape):
@@ -152,65 +120,109 @@ class Result:
         resized_image = f(new_x, new_y)
         return resized_image
 
-    def return_segmented_images(self, index):
-        # print("输入参数",index)
-        start_time = time.time()
-        # 假设 self.masks[index] 的长度不大，可以提前获取一次
-        masks_data = [np.array(mask.data)[0] for mask in self.masks[index]]
-        # 将所有 mask 先进行 resize，减少重复计算
-        resized_masks = [self.resize_image(mask, self.orig_shape) for mask in masks_data]
-        resized_masks = [torch.tensor(mask).to(torch.uint8) for mask in resized_masks]
-        # 初始化 segmented_part 为零，这样可以减少内存分配
-        orig = torch.tensor(self.pic)
-        segmented_part = torch.zeros_like(orig, dtype=torch.uint8)
-        # 合并所有的掩码
-        for mask3 in resized_masks:
-            # 对每个掩码进行处理，合并到 segmented_part 中
-            o = mask3.unsqueeze(-1)
-            temp = orig * o
-            segmented_part += temp  # 运算后将结果转换为 uint8 类型
-        segmented_part = segmented_part.cpu().numpy()
-        end_time = time.time()
-        logger.debug("tensor分割出一幅图像的气孔用时为{:.6f}s".format(end_time - start_time))
-        return segmented_part
+    def return_segmented_info(self):
+        '''
+        返回掩膜分割后的图像，需注意掩膜形状和原图像不完全相同
+        :param tensor(count, mask_shape[0], mask_shape[1]) tensor of result
+        :return: tensor(count, orig_pic_shape[0], orig_pic_shape[1]) the part of image
+        '''
+        count, mask_height, mask_width = self.masks.shape
+        orig_height, orig_width = self.orig_shape
 
-    def return_segmented_images_tensor_cpu(self, index):
-        start_time = time.time()
-        # 假设 self.masks[index] 的长度不大，可以提前获取一次
-        masks_data = [np.array(mask.data)[0] for mask in self.masks[index]]
-        # 将所有 mask 先进行 resize，减少重复计算
-        resized_masks = [self.resize_image(mask, self.orig_shape) for mask in masks_data]
-        resized_masks = [torch.tensor(mask).to(torch.uint8) for mask in resized_masks]
-        # 初始化 segmented_part 为零，这样可以减少内存分配
-        orig = torch.tensor(self.pic)
-        segmented_part = torch.zeros_like(orig, dtype=torch.uint8)
-        # 合并所有的掩码
-        for mask3 in resized_masks:
-            # 对每个掩码进行处理，合并到 segmented_part 中
-            o = mask3.unsqueeze(-1)
-            temp = orig * o
-            segmented_part += temp  # 运算后将结果转换为 uint8 类型
-        segmented_part = segmented_part.cpu().numpy()
-        end_time = time.time()
-        print("tensor用时为{:.6f}s".format(end_time - start_time))
-        return segmented_part
+        # 初始化存储分割结果的张量，确保是 uint8 类型
+        segmented_images = torch.zeros((count, orig_height, orig_width,3), dtype=torch.uint8)
+        pic_tensor = torch.tensor(self.pic)
+        results = list()
+        pos_ls = list()
+        for i in range(count):
+            # 获取每个掩膜
+            mask = self.masks.data[i]
 
-    def return_segmented_images_np(self, index):
-        start_time = time.time()
-        # 假设 self.masks[index] 的长度不大，可以提前获取一次
-        masks_data = [np.array(mask.data)[0] for mask in self.masks[index]]
-        # 将所有 mask 先进行 resize，减少重复计算
-        resized_masks = [self.resize_image(mask, self.orig_shape) for mask in masks_data]
-        # 初始化 segmented_part 为零，这样可以减少内存分配
-        segmented_part = np.zeros_like(self.pic, dtype=np.uint8)
-        # 合并所有的掩码
-        for mask3 in resized_masks:
-            # 对每个掩码进行处理，合并到 segmented_part 中
-            o = np.expand_dims(mask3, axis=-1)
-            segmented_part += (self.pic * o).astype(np.uint8)
-        end_time = time.time()
-        print("array用时为{:.6f}s".format(end_time - start_time))
-        return segmented_part
+            # 获取当前边界框，并将规范化的坐标转换为原图尺寸的实际坐标
+            # 获取当前边界框的规范化坐标，确保是 float32 类型的张量
+            xyxyn = self.boxes.xyxyn[i]  # 假设这是一个 tensor([x1_norm, y1_norm, x2_norm, y2_norm])
+
+            # 获取原图的尺寸
+            orig_height, orig_width = self.orig_shape  # (height, width)
+
+            # 将规范化的坐标转换为原图尺寸的像素坐标
+            x1_norm, y1_norm, x2_norm, y2_norm = xyxyn[0], xyxyn[1], xyxyn[2], xyxyn[3]
+
+            # 转换为像素坐标 (注意: 乘以宽度/高度，确保类型为 int)
+            x_min = int(x1_norm * orig_width)
+            y_min = int(y1_norm * orig_height)
+            x_max = int(x2_norm * orig_width)
+            y_max = int(y2_norm * orig_height)
+
+            # 裁剪原图像区域
+            cropped_image = pic_tensor[y_min:y_max, x_min:x_max]  # shape: (crop_height, crop_width)
+
+            # 将掩膜调整为原图的尺寸
+            mask_resized = torch.nn.functional.interpolate(mask.unsqueeze(0).unsqueeze(0), size=(orig_height, orig_width),
+                                         mode='bilinear', align_corners=False)
+            mask_resized = torch.round(mask_resized) #二值化
+            result = mask_resized.numpy().astype(np.uint8).squeeze(0).squeeze(0)
+            mask_resized = mask_resized.squeeze(0).expand(3, -1, -1)  # shape to: (channel,orig_height, orig_width)
+            mask_resized = mask_resized.permute(1, 2, 0) #改顺序
+            mask_resized = mask_resized[y_min:y_max, x_min:x_max]
+            parted_image = cropped_image * mask_resized  # 用掩膜提取感兴趣区域
+            results.append(result[y_min:y_max, x_min:x_max])
+            # 将分割后的图像放回到最终结果张量中
+            segmented_images[i, y_min:y_max, x_min:x_max,:] = parted_image
+            pos_ls.append((x_min, y_min, x_max, y_max))
+        return results,segmented_images,pos_ls
+
+    def return_segmented_images(self):
+        '''
+        返回掩膜分割后的图像，需注意掩膜形状和原图像不完全相同
+        :param tensor(count, mask_shape[0], mask_shape[1]) tensor of result
+        :return: tensor(count, orig_pic_shape[0], orig_pic_shape[1]) the part of image
+        '''
+        count, mask_height, mask_width = self.masks.shape
+        orig_height, orig_width = self.orig_shape
+
+        # 初始化存储分割结果的张量，确保是 uint8 类型
+        segmented_images = torch.zeros((count, orig_height, orig_width,3), dtype=torch.uint8)
+        pic_tensor = torch.tensor(self.pic)
+        results = list()
+        pos_ls = list()
+        for i in range(count):
+            # 获取每个掩膜
+            mask = self.masks.data[i]
+
+            # 获取当前边界框，并将规范化的坐标转换为原图尺寸的实际坐标
+            # 获取当前边界框的规范化坐标，确保是 float32 类型的张量
+            xyxyn = self.boxes.xyxyn[i]  # 假设这是一个 tensor([x1_norm, y1_norm, x2_norm, y2_norm])
+
+            # 获取原图的尺寸
+            orig_height, orig_width = self.orig_shape  # (height, width)
+
+            # 将规范化的坐标转换为原图尺寸的像素坐标
+            x1_norm, y1_norm, x2_norm, y2_norm = xyxyn[0], xyxyn[1], xyxyn[2], xyxyn[3]
+
+            # 转换为像素坐标 (注意: 乘以宽度/高度，确保类型为 int)
+            x_min = int(x1_norm * orig_width)
+            y_min = int(y1_norm * orig_height)
+            x_max = int(x2_norm * orig_width)
+            y_max = int(y2_norm * orig_height)
+
+            # 裁剪原图像区域
+            cropped_image = pic_tensor[y_min:y_max, x_min:x_max]  # shape: (crop_height, crop_width)
+
+            # 将掩膜调整为原图的尺寸
+            mask_resized = torch.nn.functional.interpolate(mask.unsqueeze(0).unsqueeze(0), size=(orig_height, orig_width),
+                                         mode='bilinear', align_corners=False)
+            mask_resized = torch.round(mask_resized) #二值化
+            result = mask_resized.numpy().astype(np.uint8).squeeze(0).squeeze(0)
+            mask_resized = mask_resized.squeeze(0).expand(3, -1, -1)  # shape to: (channel,orig_height, orig_width)
+            mask_resized = mask_resized.permute(1, 2, 0) #改顺序
+            mask_resized = mask_resized[y_min:y_max, x_min:x_max]
+            parted_image = cropped_image * mask_resized  # 用掩膜提取感兴趣区域
+            results.append(result[y_min:y_max, x_min:x_max])
+            # 将分割后的图像放回到最终结果张量中
+            segmented_images[i, y_min:y_max, x_min:x_max,:] = parted_image
+            pos_ls.append((x_min, y_min, x_max, y_max))
+        return results,segmented_images,pos_ls
 
     def return_cell(self):
         """
@@ -219,19 +231,29 @@ class Result:
         """
         if len(self.cell_list) == 0:
             if self.model.type == 0:
-                self.connect_masks()
+                # self.connect_masks()
+                pass
             elif self.model.type == 1:
-                for i, box in enumerate(self.box):
-                    print(len(self.box))
-                    box_ = self.return_segmented_images(i)
-                    c = cell(box_,conf = self.confident[i])
+                masks,seg_img,pos_ls = self.return_segmented_images()
+                for i in range(seg_img.shape[0]):
+                    c = cell(masks[i],
+                             self.pic,
+                             pos_ls[i],
+                             conf = self.confident[i])
                     self.cell_list.append(c)
         return self.cell_list
 
 
 class cell:
-    def __init__(self,*seg: np.array, **params):
-        self.input = seg
+    def __init__(self,*seg, **params):
+        '''
+        seg,orig,mask
+        :param seg:tuple(np.array)
+        :param params:
+        '''
+        self.seg = seg[0]
+        self.orig = seg[1]
+        self.pos = seg[2]
         self.params = params
 
         self.contour = None
@@ -246,71 +268,62 @@ class cell:
 
 
     @staticmethod
-    def return_PCA_result(k: np.array) -> object:
+    def return_PCA_result(mask: np.array) -> object:
         """
-        返回PCA分析结果
+        返回PCA分析结果,输入为mask
         :return:class PCA_result
         """
-        X = thresholding(k)
+        # 性能瓶颈
+        start_time = time.time()
+        X = np.array(np.where(mask > 0.2))
+        if X.shape[1] == 0:
+            raise ValueError("No valid coordinates found in the mask array (mask > 0.2).")
+        X = np.transpose(X)
         mean_X = np.mean(X[:, 1])
         mean_Y = np.mean(X[:, 0])
         pca = PCA(n_components=1)
+        if X.shape[0] < 2:
+            raise ValueError("Insufficient data points for PCA (need at least 2 samples).")
         X_pca = pca.fit_transform(X)
         main = pca.components_  # 主成分方向向量
+        end_time = time.time()
+        logger.debug(f"PCA的运行时间: {end_time - start_time} 秒")
+
         axis = X_pca  # 降维后数据
         line = np.dot(axis, main)
         line_x = line[:, 1] + mean_X
         line_y = line[:, 0] + mean_Y
         return PCA_result(axis, main, line_x, line_y)
 
-    def analyse_type1(self):
-        """
-        第一种分析方式：
-        识别出的一个气孔
-        type1
-        .rate:面积占比
-        :param seg:保卫细胞分割图（掩膜）
-        :param seg2:气孔分割图（掩膜）
-        :param is_open:
-        """
-        self.is_open = self.params['is_open']
-        self.cell = self.input[0]
-        self.stomata = self.input[1]
-        cell_result = self.return_PCA_result(self.cell)
-        stomata_result = self.return_PCA_result(self.stomata)
-        cell_area = np.sum(cv.threshold(self.cell,1,1,cv.IMREAD_GRAYSCALE))
-        stomata_area = np.sum(cv.threshold(self.stomata,1,1,cv.IMREAD_GRAYSCALE))
-        rate = stomata_area / (cell_area + stomata_area)
-        self.rate = rate
-        self.cell_PCA = cell_result
-        self.stomata_PCA = stomata_result
-        self.cell_area = cell_area
-        self.stomata_area = stomata_area
 
-    def analyse_type2(self):
+    def analyse_type2(self,bit_map):
         """
         第二种分析方式：
         识别出的一个气孔
         如果错误，PCA会为None
         type1
         .rate:面积占比
+        :param bit_map: orig形状的mask
         :param seg:保卫细胞分割图（掩膜）
         :param seg2:气孔分割图（掩膜）
         :param is_open:
         """
-        self.cell = self.input[0]
+
+
+        self.cell = self.seg
+        start_time3 = time.time()
         try:
             # if self.is_open:
-            cell_result = self.return_PCA_result(self.cell)
-        except:
+            cell_result = self.return_PCA_result(bit_map)
+        except TypeError as e:
             cell_result = None
+            logger.debug("return_PCA_result失败,{}".format(e))
+            print(e)
+        end_time4 = time.time()
         self.cell_PCA = cell_result
-        gray_img = cv.cvtColor(self.cell, cv.COLOR_BGR2GRAY)
-        _, thresh_img = cv.threshold(gray_img, 1, 1, cv.THRESH_BINARY)
-        cell_area = np.sum(thresh_img)  # 求和，计算非零像素点的总数
+        cell_area = np.sum(bit_map)  # 求和，计算非零像素点的总数
         self.cell_area = cell_area
-        img = cv.cvtColor(self.cell, cv.COLOR_BGR2GRAY)
-        r,temp_255 = cv.threshold(img,1,255,cv.THRESH_BINARY)
+        temp_255 = bit_map * 255
         contours, hierarchy = cv.findContours(temp_255, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
         perimeter = -1
         for contour in contours:
@@ -318,16 +331,17 @@ class cell:
             break
         self.contour = perimeter
 
+        logger.debug(f"分析中PCA_result的运行时间: {end_time4 - start_time3} 秒")
+
+
+
+
     def return_bit(self):
         # 返回二值图
-        g = cv.cvtColor(self.input[0], cv.COLOR_BGR2GRAY)
-        result = np.zeros_like(g)
-        for i in self.input:
-            g = cv.cvtColor(i, cv.COLOR_BGR2GRAY)
-            result += g
-        result1 = np.where(result > 0, 1, 0)
-        result1 =result1.astype(np.uint8)
-        return result1
+        result = np.zeros(self.orig.shape[0:2], dtype=np.uint8)
+        x_min, y_min, x_max, y_max = self.pos
+        result[y_min:y_max, x_min:x_max] = self.seg
+        return result
 
 
 
