@@ -64,6 +64,7 @@ class control_ls():
         self.ls_of_photo.clear()
 
     def add_new_pic(self,path):
+        self.lock.acquire()
         results = Model.return_results(path)
         result = results[0]
         start_time = time.time()
@@ -72,15 +73,18 @@ class control_ls():
         self.ls_of_time.append(path)
         self.deal_pics_cache[path] = new_pic
         logger.debug(f"add_new_pic运行时间: {end_time - start_time} 秒")
+        self.lock.release()
 
     def remove_pic(self):
         pass
 
     def garbage_collection(self):
         pass
+    
+    def save_data_in_thread(self,path):
+        self.save_all_data_as_csv()
 
     def save_all_data_as_csv(self):
-        print("保存中")
         def return_PCA_result_list(dir_path, filename, mod):
             '''
             单张图片的
@@ -89,21 +93,23 @@ class control_ls():
             :param mod: mode
             :return:list
             '''
+            global ls
             try:
                 filepath = os.path.join(dir_path, filename)
                 c = mod.return_results(filepath)
                 i = c[0]
                 ls = []
                 for j in i.return_cell():
-                    j.analyse_type2()
+                    bit = j.return_bit()
+                    j.analyse_type2(bit)
                     # 气孔面积  保卫细胞面积  是否打开 保卫细胞方向x 保卫细胞方向y    气孔方向x 气孔方向y 面积占比  属于的叶片（文件路径）
                     data_set = (
                         j.cell_area,
                         j.contour,
                         j.cell_area / j.contour,
                         j.params['conf'],
-                        j.cell_PCA.main[0, 0],
-                        j.cell_PCA.main[0, 1],
+                        j.cell_PCA.main[0, 0] if j.cell_PCA.main[0, 0] else None,
+                        j.cell_PCA.main[0, 1] if j.cell_PCA.main[0, 1] else None,
                         filepath
                     )
                     ls.append(data_set)
@@ -111,6 +117,7 @@ class control_ls():
                 print(e)
             return ls
 
+        update_status("保存中")
         if self.dir_path is None:
             folder_path = tk.filedialog.askdirectory()
         else:
@@ -122,31 +129,26 @@ class control_ls():
             a.writerow(('气孔面积', '气孔周长', '形状指数', '置信度', '气孔方向x', '气孔方向y', '属于的叶片（文件路径）',
                         '叶子序数', '气孔序数'))
         n_of_leaf = 0
+        ls_of_pic = []
         for i in os.listdir(folder_path):
             if i.endswith(('.bmp', '.jpg', '.jpeg')):
-                ls = return_PCA_result_list(folder_path, i, Model)
-                print(f"保存{i}中,{ls}")
-                with open(name + 'result.csv', "a", encoding='utf8', newline='') as f:
-                    a = csv.writer(f, )
-                    n_of_pic = 0
-                    for r in ls:
-                        r = list(r)
-                        r.append(n_of_leaf)
-                        r.append(n_of_pic)
-                        a.writerow(r)
-                        n_of_pic += 1
-                n_of_leaf += 1
+                ls_of_pic.append(i)
 
-    def load_cache_for_index(self):
-        """加载当前 index 前后缓存的图片"""
-        start_index = max(0, self.index - self.cache_window)
-        end_index = min(len(self.ls_of_photo), self.index + self.cache_window + 1)
-        print("将加载第{}-{}张图片".format(start_index, end_index))
-        for i in range(start_index, end_index):
-            path = self.ls_of_photo[i]
-            if path not in self.deal_pics_cache:
-                self.add_new_pic(path)
-                print("加载图片中 {},目前有{}个缓存".format(path,len(self.deal_pics_cache)))# 加载并缓存图片
+        for n,i in enumerate(ls_of_pic):
+            ls = return_PCA_result_list(folder_path, i, Model)
+            print(f"保存{n}中,共{len(ls_of_pic)}个")
+            update_status(f"保存{n}中,共{len(ls_of_pic)}个")
+            with open(name + 'result.csv', "a", encoding='utf8', newline='') as f:
+                a = csv.writer(f, )
+                n_of_pic = 0
+                for r in ls:
+                    r = list(r)
+                    r.append(n_of_leaf)
+                    r.append(n_of_pic)
+                    a.writerow(r)
+                    n_of_pic += 1
+            n_of_leaf += 1
+
 
     def start_cache_thread(self):
         """启动后台线程，定时检查并更新缓存"""
@@ -162,6 +164,17 @@ class control_ls():
             print('trying,now have {} caches'.format(len(self.deal_pics_cache)))
             self.load_cache_for_index()  # 每次检查并更新当前索引前后3张图像的缓存
             time.sleep(2)  # 每隔2秒检查一次，可以根据需求调整时间间隔
+
+    def load_cache_for_index(self):
+        """加载当前 index 前后缓存的图片"""
+        start_index = max(0, self.index - self.cache_window)
+        end_index = min(len(self.ls_of_photo), self.index + self.cache_window + 1)
+        print("将加载第{}-{}张图片".format(start_index, end_index))
+        for i in range(start_index, end_index):
+            path = self.ls_of_photo[i]
+            if path not in self.deal_pics_cache:
+                self.add_new_pic(path)
+                print("加载图片中 {},目前有{}个缓存".format(path,len(self.deal_pics_cache)))# 加载并缓存图片
 
 content = control_ls()
 
@@ -552,12 +565,54 @@ open_dir_button.pack()
 show_button = tk.Button(f1,
                         width=6, height=2,
                         relief='raise',
-                        command=content.save_all_data_as_csv,
+                        command=content.save_data_in_thread,
                         text='保存为csv')
 show_button.pack()
 
+status_frame = tk.Frame(root,
+                       width=windows_width, 
+                       height=15,
+                       borderwidth=0,  # 移除边框
+                       bd=0,           # 移除边框
+                       bg='#2B2B2B',
+                       relief='flat')  # 移除突出效果
+status_frame.place(relx=0, 
+                  rely=1.0,
+                  relwidth=1.0,
+                  anchor='sw',
+                  height=15,
+                  x=0,    # 移除左边距
+                  y=0)    # 移除底部边距，确保完全贴底
+
+# 调整文本框样式
+status_text = tk.Text(status_frame,
+                     width=50,
+                     height=1,
+                     wrap=tk.WORD,
+                     bg='#2B2B2B',
+                     fg='#FFFFFF',
+                     relief='flat',
+                     padx=5,
+                     pady=0,
+                     border=0,
+                     highlightthickness=0)
+status_text.place(relx=0.99,
+                 rely=0.5,
+                 anchor='e',
+                 relwidth=0.3,
+                 height=13)
+
+def update_status(message):
+    status_text.delete(1.0, tk.END)
+    status_text.insert(tk.END, f"{message}")
+    status_text.see(tk.END)
+
+# 在 root.mainloop() 之前添加一些初始状态信息
+update_status("程序启动完成")
+
+
 
 open_dir()
-# content.start_cache_thread()
+content.start_cache_thread()
 root.mainloop()
 

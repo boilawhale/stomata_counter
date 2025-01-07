@@ -3,43 +3,49 @@ import logging
 import os
 from datetime import datetime
 
-# ÅäÖÃÊÇ·ñÆôÓÃÈÕÖ¾¼ÇÂ¼µÄ¿ª¹Ø
-enable_logging = True  # ÉèÖÃÎª False ¿É½ûÓÃÈÕÖ¾¼ÇÂ¼
+# æ§åˆ¶æ—¥å¿—è®°å½•åŠŸèƒ½çš„å…¨å±€å¼€å…³
+enable_logging = True  # è®¾ç½®ä¸º False å¯ä»¥å®Œå…¨ç¦ç”¨æ—¥å¿—åŠŸèƒ½
 
 
 def setup_logging():
-    # Èç¹û½ûÓÃÈÕÖ¾¼ÇÂ¼£¬Ö±½Ó·µ»Ø£¬²»×öÈÎºÎÅäÖÃ
+    """
+    é…ç½®å¹¶åˆå§‹åŒ–æ—¥å¿—ç³»ç»Ÿ
+    è¿”å›: logging.Logger å¯¹è±¡ï¼Œå¦‚æœæ—¥å¿—åŠŸèƒ½è¢«ç¦ç”¨åˆ™è¿”å› None
+    """
+    # å¦‚æœæ—¥å¿—åŠŸèƒ½è¢«ç¦ç”¨ï¼Œç›´æ¥è¿”å› None
     if not enable_logging:
         return None
 
-    # »ñÈ¡µ±Ç°Ê±¼ä´Á£¬×÷ÎªÈÕÖ¾ÎÄ¼şÃû
+    # ä½¿ç”¨å½“å‰æ—¶é—´æˆ³ç”Ÿæˆå”¯ä¸€çš„æ—¥å¿—æ–‡ä»¶å
     log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
 
-    # ÉèÖÃÈÕÖ¾ÎÄ¼ş´æ´¢Ä¿Â¼
+    # åˆ›å»ºæ—¥å¿—æ–‡ä»¶å­˜å‚¨ç›®å½•ï¼ˆå¦‚æœä¸å­˜åœ¨ï¼‰
     log_dir = "logs"
-    os.makedirs(log_dir, exist_ok=True)  # Èç¹ûÄ¿Â¼²»´æÔÚ£¬´´½¨Ä¿Â¼
+    os.makedirs(log_dir, exist_ok=True)
 
     log_filepath = os.path.join(log_dir, log_filename)
 
-    # ´´½¨ÈÕÖ¾¼ÇÂ¼Æ÷
+    # åˆ›å»ºå¹¶é…ç½®ä¸»æ—¥å¿—è®°å½•å™¨
     logger = logging.getLogger('my_logger')
-    logger.setLevel(logging.DEBUG)  # ÉèÖÃÈÕÖ¾¼¶±ğ
+    logger.setLevel(logging.DEBUG)  # è®¾ç½®ä¸ºæœ€è¯¦ç»†çš„æ—¥å¿—çº§åˆ«
 
-    # ´´½¨ÎÄ¼ş´¦ÀíÆ÷£¬²¢ÉèÖÃÎÄ¼ş¸ñÊ½
+    # é…ç½®æ–‡ä»¶å¤„ç†å™¨
+    # å°†æ—¥å¿—æ¶ˆæ¯å†™å…¥æ–‡ä»¶ï¼ŒåŒ…å«æ‰€æœ‰çº§åˆ«çš„æ—¥å¿—
     file_handler = logging.FileHandler(log_filepath)
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
-    # ´´½¨¿ØÖÆÌ¨´¦ÀíÆ÷£¬²¢ÉèÖÃ¿ØÖÆÌ¨Êä³ö¸ñÊ½
+    # é…ç½®æ§åˆ¶å°å¤„ç†å™¨
+    # åªæ˜¾ç¤º INFO åŠä»¥ä¸Šçº§åˆ«çš„æ—¥å¿—åˆ°æ§åˆ¶å°
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
-    # ½«´¦ÀíÆ÷Ìí¼Óµ½ÈÕÖ¾¼ÇÂ¼Æ÷
+    # å°†å¤„ç†å™¨æ·»åŠ åˆ°æ—¥å¿—è®°å½•å™¨
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    return logger  # ·µ»ØÈÕÖ¾¼ÇÂ¼Æ÷
+    return logger
 
 
-# Èç¹ûĞèÒªÔÚ³ÌĞòÆô¶¯Ê±¾Í³õÊ¼»¯ÈÕÖ¾£¬¿ÉÒÔÖ±½Óµ÷ÓÃ setup_logging
+# åˆ›å»ºå…¨å±€æ—¥å¿—è®°å½•å™¨å®ä¾‹
 logger = setup_logging()

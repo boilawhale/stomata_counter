@@ -277,13 +277,15 @@ class cell:
         start_time = time.time()
         X = np.array(np.where(mask > 0.2))
         if X.shape[1] == 0:
-            raise ValueError("No valid coordinates found in the mask array (mask > 0.2).")
+            return None
+            # raise ValueError("No valid coordinates found in the mask array (mask > 0.2).")
         X = np.transpose(X)
         mean_X = np.mean(X[:, 1])
         mean_Y = np.mean(X[:, 0])
         pca = PCA(n_components=1)
         if X.shape[0] < 2:
-            raise ValueError("Insufficient data points for PCA (need at least 2 samples).")
+            return None
+            # raise ValueError("Insufficient data points for PCA (need at least 2 samples).")
         X_pca = pca.fit_transform(X)
         main = pca.components_  # 主成分方向向量
         end_time = time.time()
