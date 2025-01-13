@@ -16,6 +16,9 @@ def train0(set_name='version2'):
     model = YOLO("runs/segment/train29/weights/best.pt")
     model.train(data='./dataset/{}/data.yaml'.format(set_name), epochs=1000, device=0, batch=4)
 
+def train1(dataset_path=r'/mnt/data_hdd1/yangj/zx_yolo/test-4'):
+    model = YOLO(r'G:\sc\sc-master\yolo\yolov8n-seg.pt')
+    model.train(data=dataset_path, epochs=1000, device=0, batch=16)
 
 
 
