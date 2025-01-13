@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteTargetsManager">
+    <option name="projectDefaultTargetUuid" value="267abeed-9dc5-48fa-aee2-305669d94df9" />
+    <targets>
+      <target name="yangj@54v92259e3.goho.co:48653" type="ssh/sftp" uuid="267abeed-9dc5-48fa-aee2-305669d94df9">
+        <config>
+          <option name="projectRootOnTarget" value="/home/yangj/zx_code/stomata_counter" />
+          <option name="serverName" value="yangj@54v92259e3.goho.co:48653 password" />
+        </config>
+      </target>
+    </targets>
+  </component>
+</project>

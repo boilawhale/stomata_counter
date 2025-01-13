@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="yangj@54v92259e3.goho.co:48653 password" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="yangj@54v92259e3.goho.co:48653 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_835" local="$PROJECT_DIR$" />
+            <mapping local="" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="yangj@55h907108o.zicp.fun:38085 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_627" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
