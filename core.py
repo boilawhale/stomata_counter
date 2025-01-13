@@ -111,6 +111,7 @@ class Result:
         self.confident = result.boxes.conf
 
 
+
     @staticmethod
     def resize_image(image, new_shape):
         x, y = np.arange(image.shape[1]), np.arange(image.shape[0])
@@ -212,7 +213,7 @@ class Result:
             # 将掩膜调整为原图的尺寸
             mask_resized = torch.nn.functional.interpolate(mask.unsqueeze(0).unsqueeze(0), size=(orig_height, orig_width),
                                          mode='bilinear', align_corners=False)
-            mask_resized = torch.round(mask_resized) #二值化
+            mask_resized = torch.where(mask_resized >= 0.7, torch.tensor(1.0), torch.tensor(0.0)) #二值化
             result = mask_resized.numpy().astype(np.uint8).squeeze(0).squeeze(0)
             mask_resized = mask_resized.squeeze(0).expand(3, -1, -1)  # shape to: (channel,orig_height, orig_width)
             mask_resized = mask_resized.permute(1, 2, 0) #改顺序
@@ -239,7 +240,7 @@ class Result:
                     c = cell(masks[i],
                              self.pic,
                              pos_ls[i],
-                             conf = self.confident[i])
+                             conf = float(self.confident[i]))
                     self.cell_list.append(c)
         return self.cell_list
 
@@ -288,6 +289,9 @@ class cell:
             # raise ValueError("Insufficient data points for PCA (need at least 2 samples).")
         X_pca = pca.fit_transform(X)
         main = pca.components_  # 主成分方向向量
+        wide_direction = np.array([[main[0][1]], [-main[0][0]]])
+        wide_axis = np.dot(X, wide_direction)
+        wide = max(wide_axis)-min(wide_axis)
         end_time = time.time()
         logger.debug(f"PCA的运行时间: {end_time - start_time} 秒")
 
@@ -295,7 +299,7 @@ class cell:
         line = np.dot(axis, main)
         line_x = line[:, 1] + mean_X
         line_y = line[:, 0] + mean_Y
-        return PCA_result(axis, main, line_x, line_y)
+        return PCA_result(axis, main, line_x, line_y,wide)
 
 
     def analyse_type2(self,bit_map):
@@ -333,6 +337,7 @@ class cell:
             break
         self.contour = perimeter
 
+
         logger.debug(f"分析中PCA_result的运行时间: {end_time4 - start_time3} 秒")
 
 
@@ -349,7 +354,7 @@ class cell:
 
 
 class PCA_result:
-    def __init__(self, axis, main, line_x, line_y):
+    def __init__(self, axis, main, line_x, line_y,wide):
         """
         单个气孔的主成分分析结果
         .axis 降维后数据，ndarray(n,1)
@@ -361,11 +366,9 @@ class PCA_result:
         self.main = main
         self.line_x = line_x
         self.line_y = line_y
-        self.max_axis_length = max(axis) - min(axis)
-        plt.subplot(4, 4, 13)
-        nums, p, o = plt.hist(axis)
-        self.max_wide = max(nums)
-        plt.cla()
+        self.max_axis_length = float(max(axis) - min(axis))
+        self.max_wide = float(wide)
+
 
     def return_axis(self):
         """

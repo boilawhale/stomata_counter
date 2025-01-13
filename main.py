@@ -13,6 +13,7 @@ import matplotlib
 from logging_file import logger
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 # 避免中文乱码
 matplotlib.rc("font", family='YouYuan')
@@ -81,10 +82,17 @@ class control_ls():
     def garbage_collection(self):
         pass
     
-    def save_data_in_thread(self,path):
-        self.save_all_data_as_csv()
+    def save_data_in_thread(self):
+        folder_path = tk.filedialog.askdirectory()
+        update_status(f"{folder_path}已经加入处理队列")
+        if folder_path:
+            pass
+        else:
+            return None
+        thread = threading.Thread(target=self.save_all_data_as_csv,args=(folder_path,))
+        thread.start()
 
-    def save_all_data_as_csv(self):
+    def save_all_data_as_csv(self,folder_path):
         def return_PCA_result_list(dir_path, filename, mod):
             '''
             单张图片的
@@ -102,7 +110,7 @@ class control_ls():
                 for j in i.return_cell():
                     bit = j.return_bit()
                     j.analyse_type2(bit)
-                    # 气孔面积  保卫细胞面积  是否打开 保卫细胞方向x 保卫细胞方向y    气孔方向x 气孔方向y 面积占比  属于的叶片（文件路径）
+                    # 气孔面积  保卫细胞面积  是否打开 保卫细胞方向x 保卫细胞方向y 气孔方向x 气孔方向y 面积占比 最大长度 最大宽度 属于的叶片（文件路径）,文件夹','文件名'
                     data_set = (
                         j.cell_area,
                         j.contour,
@@ -110,34 +118,41 @@ class control_ls():
                         j.params['conf'],
                         j.cell_PCA.main[0, 0] if j.cell_PCA.main[0, 0] else None,
                         j.cell_PCA.main[0, 1] if j.cell_PCA.main[0, 1] else None,
-                        filepath
+                        j.cell_PCA.max_axis_length if j.cell_PCA.max_axis_length else None,
+                        j.cell_PCA.max_wide if j.cell_PCA.max_wide else None,
+                        filepath,
+                        dir_path,
+                        os.path.split(filepath)[1]
                     )
                     ls.append(data_set)
             except Exception as e:
                 print(e)
             return ls
 
-        update_status("保存中")
-        if self.dir_path is None:
-            folder_path = tk.filedialog.askdirectory()
-        else:
-            folder_path = self.dir_path
-
+        # if self.dir_path is None:
+        #     folder_path = tk.filedialog.askdirectory()
+        # else:
+        #     folder_path = self.dir_path
+        self.lock.acquire()
         name = os.path.split(folder_path)[1]
         with open(name + 'result.csv', "w", encoding='utf8', newline='') as f:
             a = csv.writer(f, )
-            a.writerow(('气孔面积', '气孔周长', '形状指数', '置信度', '气孔方向x', '气孔方向y', '属于的叶片（文件路径）',
+            a.writerow(('气孔面积', '气孔周长', '形状指数', '置信度', '气孔方向x', '气孔方向y', '最大长度','最大宽度','属于的叶片（文件路径）','文件夹','文件名',
                         '叶子序数', '气孔序数'))
         n_of_leaf = 0
         ls_of_pic = []
-        for i in os.listdir(folder_path):
-            if i.endswith(('.bmp', '.jpg', '.jpeg')):
-                ls_of_pic.append(i)
+
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                # 获取每个文件的完整路径
+                if file.endswith(('.bmp', '.jpg', '.jpeg')):
+                    file_path = os.path.join(root, file)
+                    ls_of_pic.append(file_path)
 
         for n,i in enumerate(ls_of_pic):
             ls = return_PCA_result_list(folder_path, i, Model)
-            print(f"保存{n}中,共{len(ls_of_pic)}个")
-            update_status(f"保存{n}中,共{len(ls_of_pic)}个")
+            print(f"保存第{n+1}中,共{len(ls_of_pic)}个")
+            update_status(f"保存{name}第{n+1}中,共{len(ls_of_pic)}个")
             with open(name + 'result.csv', "a", encoding='utf8', newline='') as f:
                 a = csv.writer(f, )
                 n_of_pic = 0
@@ -148,6 +163,8 @@ class control_ls():
                     a.writerow(r)
                     n_of_pic += 1
             n_of_leaf += 1
+        update_status(f"保存在{name + 'result.csv'}中")
+        self.lock.release()
 
 
     def start_cache_thread(self):
@@ -411,6 +428,8 @@ def open_dir(origin=default_picdir):
         # 清空列表
         content.clear()
         content.get_name(folder_path)
+    else:
+        return None
     start_time = time.time()
     if len(content.ls_of_photo) > 0:
         show(content.ls_of_photo[0])
