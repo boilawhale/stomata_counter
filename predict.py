@@ -509,7 +509,7 @@ def return_PCA_result_list(dir_path, filename, mod):
 
 
 if __name__ == '__main__':
-    # a = Model(model_path='disuse/segment/train17/weights/best.pt')
+    # a = Model(model='disuse/segment/train17/weights/best.pt')
     # a.model.val()
     # type3()
     type3()

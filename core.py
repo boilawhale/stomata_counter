@@ -1,17 +1,19 @@
 import csv
-import logging
 import time
 
 import torch
 from scipy import interpolate
 from ultralytics import YOLO
 from PIL import Image
-import cv2 as cv
+
+from cv2 import arcLength
+from cv2 import findContours
+from cv2 import RETR_EXTERNAL
+from cv2 import CHAIN_APPROX_SIMPLE
+
 import os
 import numpy as np
-from copy import deepcopy
 from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
 
 from logging_file import logger
 
@@ -330,10 +332,10 @@ class cell:
         cell_area = np.sum(bit_map)  # 求和，计算非零像素点的总数
         self.cell_area = cell_area
         temp_255 = bit_map * 255
-        contours, hierarchy = cv.findContours(temp_255, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        contours, hierarchy = findContours(temp_255, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE)
         perimeter = -1
         for contour in contours:
-            perimeter = cv.arcLength(contour, True)  # 计算轮廓的周长
+            perimeter = arcLength(contour, True)  # 计算轮廓的周长
             break
         self.contour = perimeter
 

@@ -8,7 +8,7 @@ import core
 from PIL import Image, ImageTk
 import os
 
-import matplotlib
+from matplotlib import rc
 
 from logging_file import logger
 import threading
@@ -16,11 +16,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 # 避免中文乱码
-matplotlib.rc("font", family='YouYuan')
+rc("font", family='YouYuan')
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
-# model_path = 'runs/segment/train10 extend/weights/best.pt'
-model_path = 'runs/segment/train34/weights/best.pt'
+# model = 'runs/segment/train10 extend/weights/best.pt'
+model_path = 'model/base.pt'
+default_picdir = r'C:\Users\Mr zhang\Desktop\张霄\2023.0817\10X反'
 
 
 ls_of_photo = []
@@ -28,7 +29,6 @@ ls_of_time = []
 dir_of_result = dict()
 
 index = 0
-default_picdir = r'C:\Users\Mr zhang\Desktop\张霄\2023.0817\10X反'
 
 first_open = True
 Model = core.Model(model_path=model_path, root_path='./')
@@ -420,7 +420,10 @@ def mask():
 def open_dir(origin=default_picdir):
     # 选择文件夹
     if content.first_open:
-        folder_path = origin
+        if os.path.exists(origin):
+            folder_path = origin
+        else:
+            folder_path = tk.filedialog.askdirectory()
         content.first_open = False
     else:
         folder_path = tk.filedialog.askdirectory()
@@ -503,7 +506,7 @@ windows_height = 768
 
 root = tk.Tk()
 root.geometry(str(windows_width) + "x" + str(windows_height) + "+0+0")
-root.title("111")
+root.title("气孔识别")
 main_img = tk.Canvas(root,
                     bg='black',
                     height=768, width=1024,
