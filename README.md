@@ -3,3 +3,6 @@
 
 基于pytorch和YOLOv8
 
+releases版本有cpu和gpu版本，其中cpu效果较差
+
+测试中window系统可能会缺少部分dll文件，可通过命令行中的网址进行下载
